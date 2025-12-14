@@ -18,6 +18,19 @@ export default defineConfig(({ mode }) => {
         alias: {
           '@': path.resolve(__dirname, '.'),
         }
+      },
+      build: {
+        rollupOptions: {
+          output: {
+            manualChunks: {
+              // Split Firebase into separate chunk
+              'firebase': ['firebase/app', 'firebase/firestore'],
+              // Split React into separate chunk
+              'react-vendor': ['react', 'react-dom']
+            }
+          }
+        },
+        chunkSizeWarningLimit: 600
       }
     };
 });

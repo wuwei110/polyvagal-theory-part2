@@ -1,84 +1,119 @@
-import { QAItem } from './types';
+import type { QAItem } from './types';
 
-// Fix: Replaced Firebase implementation with localStorage mock to resolve import errors
-// and provide functionality without valid API keys. 
-// Original error: Module '"firebase/app"' has no exported member 'initializeApp'.
-// This suggests a mismatch between the installed Firebase version (likely v8 or older) and the v9 modular code.
-// Falling back to a robust localStorage implementation ensures the app runs correctly.
+// Firestore (v9 modular) implementation for QA board.
+// This file expects the following env vars to be set (see `.env.local.example`):
+// VITE_FIREBASE_API_KEY, VITE_FIREBASE_AUTH_DOMAIN, VITE_FIREBASE_PROJECT_ID,
+// VITE_FIREBASE_STORAGE_BUCKET, VITE_FIREBASE_MESSAGING_SENDER_ID, VITE_FIREBASE_APP_ID
 
-const STORAGE_KEY = 'qa_board_demo_data';
+import { initializeApp } from 'firebase/app';
+import {
+  getFirestore,
+  collection,
+  addDoc,
+  onSnapshot,
+  query,
+  orderBy,
+  doc,
+  updateDoc,
+  deleteDoc,
+} from 'firebase/firestore';
+import { getAuth, signInAnonymously } from 'firebase/auth';
 
-const getMockData = (): QAItem[] => {
-  try {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored) {
-      return JSON.parse(stored);
-    }
-  } catch (e) {
-    console.warn("Failed to parse local storage data", e);
-  }
-  return [];
+const firebaseConfig = {
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID,
 };
 
-const saveMockData = (data: QAItem[]) => {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-  } catch (e) {
-    console.warn("Failed to save to local storage", e);
+let app: ReturnType<typeof initializeApp> | null = null;
+let db: ReturnType<typeof getFirestore> | null = null;
+let auth: ReturnType<typeof getAuth> | null = null;
+let authPromise: Promise<any> | null = null;
+
+try {
+  // Initialize app only if config appears to be present
+  if (firebaseConfig.apiKey) {
+    app = initializeApp(firebaseConfig as any);
+    db = getFirestore(app);
+    auth = getAuth(app);
+    
+    // Sign in anonymously to allow R/W based on rules that check request.auth
+    authPromise = signInAnonymously(auth).catch(err => console.error("Firebase Auth Error:", err));
+  } else {
+    console.warn('Firebase config missing; Firestore will not be initialized. Falling back to no-op functions.');
   }
-};
+} catch (e) {
+  console.error('Failed to initialize Firebase:', e);
+}
+
+const colRef = db ? collection(db, 'qa_items') : null;
 
 export const subscribeToQA = (callback: (data: QAItem[]) => void) => {
-  // Return current data immediately
-  callback(getMockData());
+  if (!db || !colRef) {
+    // If Firestore is not configured, return empty list and a no-op unsubscribe
+    callback([]);
+    return () => {};
+  }
 
-  // Poll for changes to simulate real-time updates across tabs/windows
-  // This replaces the Firestore onSnapshot listener
-  const interval = setInterval(() => {
-    callback(getMockData());
-  }, 1000);
+  const q = query(colRef, orderBy('timestamp', 'desc'));
+  const unsub = onSnapshot(q, (snap) => {
+    const items: QAItem[] = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
+    callback(items as QAItem[]);
+  }, (err) => {
+    console.error('Firestore onSnapshot error:', err);
+    callback([]);
+  });
 
-  return () => clearInterval(interval);
+  return unsub;
 };
 
 export const addQuestion = async (nickname: string, question: string): Promise<string> => {
-  // Simulate network delay
-  await new Promise(resolve => setTimeout(resolve, 300));
-
-  const items = getMockData();
-  const id = Date.now().toString();
-  const newItem: QAItem = {
-    id,
-    nickname,
-    question,
-    reply: '',
-    isReplied: false,
-    timestamp: Math.floor(Date.now() / 1000), // Unix timestamp in seconds
-  };
+  if (!db || !colRef) {
+    throw new Error('Firestore not initialized');
+  }
   
-  // Add to the beginning of the list (newest first)
-  saveMockData([newItem, ...items]);
-  return id;
+  // Wait for auth to complete to ensure we have a userId
+  if (authPromise) {
+      try { await authPromise; } catch(e) { /* ignore auth error, continue as guest without ID if needed */ }
+  }
+
+  const now = Math.floor(Date.now() / 1000);
+  
+  // Attach userId if authenticated
+  const userId = auth?.currentUser?.uid || null;
+
+  const docRef = await addDoc(colRef, { 
+      nickname, 
+      question, 
+      reply: '', 
+      isReplied: false, 
+      timestamp: now,
+      userId 
+  });
+  return docRef.id;
 };
 
 export const replyToQuestion = async (id: string, reply: string) => {
-  // Simulate network delay
-  await new Promise(resolve => setTimeout(resolve, 300));
-
-  const items = getMockData();
-  const updatedItems = items.map(item => 
-    item.id === id 
-      ? { ...item, reply, isReplied: true }
-      : item
-  );
-  saveMockData(updatedItems);
+  if (!db) throw new Error('Firestore not initialized');
+  const d = doc(db, 'qa_items', id);
+  await updateDoc(d, { reply, isReplied: true });
 };
 
 export const deleteQuestion = async (id: string) => {
-  // Simulate network delay
-  await new Promise(resolve => setTimeout(resolve, 300));
-
-  const items = getMockData();
-  const updatedItems = items.filter(item => item.id !== id);
-  saveMockData(updatedItems);
+  if (!db) throw new Error('Firestore not initialized');
+  try {
+    const d = doc(db, 'qa_items', id);
+    await deleteDoc(d);
+  } catch (error: any) {
+    console.error("Delete failed:", error);
+    // Re-throw or handle. Since UI is optimistic, maybe we should alert?
+    // We can't alert easily from here without browser API.
+    if (error.code === 'permission-denied') {
+        alert("删除失败：权限不足。请检查是否为您的留言或数据库规则配置。");
+    }
+    throw error;
+  }
 };

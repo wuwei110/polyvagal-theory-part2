@@ -4,9 +4,8 @@ import { QABoard } from './components/QABoard';
 import { PageContent } from './types';
 
 // Background music URL - Erik Satie: Gymnopédie No. 1
-// Source: Wikimedia Commons (Kevin MacLeod performance) - Transcoded to MP3 for maximum compatibility
-const BGM_URL = "https://upload.wikimedia.org/wikipedia/commons/transcoded/b/b5/Gymnopedie_No._1_%28Satie%29_-_Kevin_MacLeod.ogg/Gymnopedie_No._1_%28Satie%29_-_Kevin_MacLeod.ogg.mp3";
-
+// Source: Local file in public/testrec.MP3
+const BGM_URL = "/testrec.MP3";
 // Helper to determine total sheets
 const TOTAL_SHEETS = Math.ceil(bookPages.length / 2);
 
@@ -98,7 +97,10 @@ const App: React.FC = () => {
         preload="auto"
         onPlay={() => setIsAudioPlaying(true)}
         onPause={() => setIsAudioPlaying(false)}
-        onError={() => console.log("Audio source failed to load.")}
+        onError={(e) => {
+            console.log("Audio source failed to load.", e);
+            alert("背景音乐加载失败。请确保 public/testrec.MP3 文件存在且文件名大小写匹配。");
+        }}
       />
 
       {/* Audio Control Button - Z-Index 100 to ensure it's on top */}
@@ -322,7 +324,10 @@ const Sheet: React.FC<SheetProps> = ({
 const BookPageContent: React.FC<{ page: PageContent }> = ({ page }) => {
   if (page.isInteractive) {
     return (
-        <div className="flex-1 overflow-hidden p-2">
+        <div className="flex-1 overflow-hidden p-2 flex flex-col">
+            <div className="w-full text-center mb-1 flex-shrink-0">
+                <p className="text-[10px] text-stone-400 font-serif">未经本网页作者许可不得转载</p>
+            </div>
             <QABoard />
         </div>
     );
@@ -333,6 +338,11 @@ const BookPageContent: React.FC<{ page: PageContent }> = ({ page }) => {
   if (isCover) {
       return (
         <div className="h-full flex flex-col items-center justify-center p-6 sm:p-8 bg-[url('https://www.transparenttextures.com/patterns/leather.png')] text-orange-100 relative overflow-hidden">
+            {/* Copyright Header (Cover) */}
+            <div className="absolute top-2 w-full text-center z-20">
+                <p className="text-[10px] text-orange-300/60 font-serif">未经本网页作者许可不得转载</p>
+            </div>
+
             {/* Ornate Border */}
             <div className="absolute inset-2 sm:inset-4 border-2 border-orange-300/30 rounded-sm pointer-events-none"></div>
             <div className="absolute inset-4 sm:inset-6 border border-orange-300/20 rounded-sm pointer-events-none"></div>
@@ -373,6 +383,11 @@ const BookPageContent: React.FC<{ page: PageContent }> = ({ page }) => {
 
   return (
     <div className="flex-1 p-6 sm:p-10 md:p-12 overflow-y-auto scrollbar-hide flex flex-col">
+      {/* Copyright Header */}
+      <div className="w-full text-center mb-2">
+          <p className="text-[10px] text-stone-400 font-serif">未经本网页作者许可不得转载</p>
+      </div>
+
       {/* Header/Title */}
       <div className="mb-4 sm:mb-6 border-b-2 border-stone-800/10 pb-2 sm:pb-4">
         <h2 className="text-lg sm:text-2xl font-bold text-stone-800 font-serif">{page.title}</h2>

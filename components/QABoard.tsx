@@ -3,10 +3,12 @@ import { subscribeToQA, addQuestion, replyToQuestion, deleteQuestion } from '../
 import { QAItem } from '../types';
 
 const MY_QUESTIONS_KEY = 'my_qa_ids';
-const ADMIN_PASSWORD = 'admin'; // 硬编码管理员密码
+const ADMIN_PASSWORD = import.meta.env.VITE_ADMIN_PASSWORD || 'admin';
+const ITEMS_PER_PAGE = 5;
 
 export const QABoard: React.FC = () => {
   const [questions, setQuestions] = useState<QAItem[]>([]);
+  const [currentPage, setCurrentPage] = useState(1);
   const [nickname, setNickname] = useState('');
   const [newQuestion, setNewQuestion] = useState('');
   
@@ -56,7 +58,7 @@ export const QABoard: React.FC = () => {
           setShowPwdInput(false);
           setPwdValue('');
       } else {
-          alert("密码错误");
+          alert("你无权进入管理员模式！");
           setPwdValue('');
       }
   };
@@ -111,15 +113,17 @@ export const QABoard: React.FC = () => {
         </h2>
         
         <div className="flex flex-wrap gap-2 items-center justify-end w-full sm:w-auto">
-            {/* Backup Button - Always Visible */}
-            <button 
-                onClick={downloadData}
-                className="text-xs px-2 py-1.5 rounded bg-blue-50 text-blue-600 hover:bg-blue-100 border border-blue-200 flex items-center gap-1 transition-colors"
-                title="保存数据到本地"
-            >
-                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
-                备份数据
-            </button>
+            {/* Backup Button - Admin Only */}
+            {isAdmin && (
+                <button 
+                    onClick={downloadData}
+                    className="text-xs px-2 py-1.5 rounded bg-blue-50 text-blue-600 hover:bg-blue-100 border border-blue-200 flex items-center gap-1 transition-colors"
+                    title="保存数据到本地"
+                >
+                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                    备份数据
+                </button>
+            )}
 
             {/* Admin Controls */}
             {showPwdInput ? (
@@ -155,7 +159,7 @@ export const QABoard: React.FC = () => {
         {questions.length === 0 ? (
             <p className="text-center text-gray-400 italic mt-10">暂无提问，欢迎留言...</p>
         ) : (
-            questions.map((q) => {
+            questions.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE).map((q) => {
                 const isMyQuestion = myQuestionIds.includes(q.id);
                 
                 return (
@@ -209,6 +213,29 @@ export const QABoard: React.FC = () => {
                     )}
                 </div>
             )})
+        )}
+        
+        {/* Pagination */}
+        {questions.length > ITEMS_PER_PAGE && (
+            <div className="flex justify-center items-center gap-2 mt-4 pt-2 border-t border-dashed border-gray-200">
+                <button 
+                    onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                    disabled={currentPage === 1}
+                    className="text-xs px-2 py-1 rounded bg-gray-100 disabled:opacity-50 hover:bg-gray-200"
+                >
+                    上一页
+                </button>
+                <span className="text-xs text-gray-500">
+                    {currentPage} / {Math.ceil(questions.length / ITEMS_PER_PAGE)}
+                </span>
+                <button 
+                    onClick={() => setCurrentPage(p => Math.min(Math.ceil(questions.length / ITEMS_PER_PAGE), p + 1))}
+                    disabled={currentPage === Math.ceil(questions.length / ITEMS_PER_PAGE)}
+                    className="text-xs px-2 py-1 rounded bg-gray-100 disabled:opacity-50 hover:bg-gray-200"
+                >
+                    下一页
+                </button>
+            </div>
         )}
       </div>
 

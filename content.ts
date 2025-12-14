@@ -1,9 +1,9 @@
 import { PageContent } from './types';
 
 // Placeholder images based on user upload descriptions
-const IMG_HIERARCHY = "https://picsum.photos/id/1084/500/300"; // Represents the colorful hierarchy diagrams
-const IMG_NERVES = "https://picsum.photos/id/106/500/400"; // Represents the face/nerve diagrams
-const IMG_SENSES = "https://picsum.photos/id/237/500/300"; // Represents the interception diagram
+const IMG_HIERARCHY = "image_4.png"; // Represents the colorful hierarchy diagrams
+const IMG_NERVES = "image_3.png"; // Represents the face/nerve diagrams
+const IMG_SENSES = "image_5.png"; // Represents the interception diagram
 
 export const bookPages: PageContent[] = [
   {
