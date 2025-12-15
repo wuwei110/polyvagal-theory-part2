@@ -1,10 +1,4 @@
 import type { QAItem } from './types';
-
-// Firestore (v9 modular) implementation for QA board.
-// This file expects the following env vars to be set (see `.env.local.example`):
-// VITE_FIREBASE_API_KEY, VITE_FIREBASE_AUTH_DOMAIN, VITE_FIREBASE_PROJECT_ID,
-// VITE_FIREBASE_STORAGE_BUCKET, VITE_FIREBASE_MESSAGING_SENDER_ID, VITE_FIREBASE_APP_ID
-
 import { initializeApp } from 'firebase/app';
 import {
   getFirestore,
@@ -19,6 +13,7 @@ import {
 } from 'firebase/firestore';
 import { getAuth, signInAnonymously } from 'firebase/auth';
 
+// --- Configuration ---
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
   authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
@@ -28,92 +23,124 @@ const firebaseConfig = {
   appId: import.meta.env.VITE_FIREBASE_APP_ID,
 };
 
-let app: ReturnType<typeof initializeApp> | null = null;
-let db: ReturnType<typeof getFirestore> | null = null;
-let auth: ReturnType<typeof getAuth> | null = null;
-let authPromise: Promise<any> | null = null;
+// Check if valid config is present
+const hasValidConfig = !!firebaseConfig.apiKey;
+export const isLocalMode = !hasValidConfig;
 
-try {
-  // Initialize app only if config appears to be present
-  if (firebaseConfig.apiKey) {
-    app = initializeApp(firebaseConfig as any);
-    db = getFirestore(app);
-    auth = getAuth(app);
-    
-    // Sign in anonymously to allow R/W based on rules that check request.auth
-    authPromise = signInAnonymously(auth).catch(err => console.error("Firebase Auth Error:", err));
-  } else {
-    console.warn('Firebase config missing; Firestore will not be initialized. Falling back to no-op functions.');
-  }
-} catch (e) {
-  console.error('Failed to initialize Firebase:', e);
-}
+// --- Implementations ---
 
-const colRef = db ? collection(db, 'qa_items') : null;
+let _subscribeToQA: (callback: (data: QAItem[]) => void) => () => void;
+let _addQuestion: (nickname: string, question: string) => Promise<string>;
+let _replyToQuestion: (id: string, reply: string) => Promise<void>;
+let _deleteQuestion: (id: string) => Promise<void>;
 
-export const subscribeToQA = (callback: (data: QAItem[]) => void) => {
-  if (!db || !colRef) {
-    // If Firestore is not configured, return empty list and a no-op unsubscribe
-    callback([]);
-    return () => {};
-  }
-
-  const q = query(colRef, orderBy('timestamp', 'desc'));
-  const unsub = onSnapshot(q, (snap) => {
-    const items: QAItem[] = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
-    callback(items as QAItem[]);
-  }, (err) => {
-    console.error('Firestore onSnapshot error:', err);
-    callback([]);
-  });
-
-  return unsub;
-};
-
-export const addQuestion = async (nickname: string, question: string): Promise<string> => {
-  if (!db || !colRef) {
-    throw new Error('Firestore not initialized');
-  }
+if (hasValidConfig) {
+  // === FIREBASE IMPLEMENTATION ===
+  console.log("Initializing Firebase Backend...");
   
-  // Wait for auth to complete to ensure we have a userId
-  if (authPromise) {
-      try { await authPromise; } catch(e) { /* ignore auth error, continue as guest without ID if needed */ }
-  }
-
-  const now = Math.floor(Date.now() / 1000);
+  const app = initializeApp(firebaseConfig);
+  const db = getFirestore(app);
+  const auth = getAuth(app);
   
-  // Attach userId if authenticated
-  const userId = auth?.currentUser?.uid || null;
+  // Anonymous Auth
+  const authPromise = signInAnonymously(auth).catch(err => console.error("Firebase Auth Error:", err));
+  const colRef = collection(db, 'qa_items');
 
-  const docRef = await addDoc(colRef, { 
-      nickname, 
-      question, 
-      reply: '', 
-      isReplied: false, 
-      timestamp: now,
-      userId 
-  });
-  return docRef.id;
-};
+  _subscribeToQA = (callback) => {
+    const q = query(colRef, orderBy('timestamp', 'desc'));
+    return onSnapshot(q, (snap) => {
+      const items = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
+      callback(items as QAItem[]);
+    }, (err) => {
+      console.error('Firestore Error:', err);
+      // Fallback to empty if error
+      callback([]);
+    });
+  };
 
-export const replyToQuestion = async (id: string, reply: string) => {
-  if (!db) throw new Error('Firestore not initialized');
-  const d = doc(db, 'qa_items', id);
-  await updateDoc(d, { reply, isReplied: true });
-};
+  _addQuestion = async (nickname, question) => {
+    await authPromise; // Ensure auth
+    const userId = auth.currentUser?.uid || null;
+    const now = Math.floor(Date.now() / 1000);
+    const docRef = await addDoc(colRef, { 
+        nickname, 
+        question, 
+        reply: '', 
+        isReplied: false, 
+        timestamp: now,
+        userId 
+    });
+    return docRef.id;
+  };
 
-export const deleteQuestion = async (id: string) => {
-  if (!db) throw new Error('Firestore not initialized');
-  try {
+  _replyToQuestion = async (id, reply) => {
+    const d = doc(db, 'qa_items', id);
+    await updateDoc(d, { reply, isReplied: true });
+  };
+
+  _deleteQuestion = async (id) => {
     const d = doc(db, 'qa_items', id);
     await deleteDoc(d);
-  } catch (error: any) {
-    console.error("Delete failed:", error);
-    // Re-throw or handle. Since UI is optimistic, maybe we should alert?
-    // We can't alert easily from here without browser API.
-    if (error.code === 'permission-denied') {
-        alert("删除失败：权限不足。请检查是否为您的留言或数据库规则配置。");
-    }
-    throw error;
+  };
+
+} else {
+  // === LOCAL STORAGE IMPLEMENTATION (Mock) ===
+  console.warn("Firebase config missing. Using LocalStorage (No Sync).");
+  
+  const STORAGE_KEY = 'qa_board_demo_data';
+  const listeners: Set<(data: QAItem[]) => void> = new Set();
+
+  const getMockData = (): QAItem[] => {
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY);
+      return stored ? JSON.parse(stored) : [];
+    } catch { return []; }
+  };
+
+  const saveMockData = (data: QAItem[]) => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    listeners.forEach(cb => cb(data));
+  };
+
+  // Sync across tabs
+  if (typeof window !== 'undefined') {
+      window.addEventListener('storage', (e) => {
+        if (e.key === STORAGE_KEY) {
+           listeners.forEach(cb => cb(getMockData()));
+        }
+      });
   }
-};
+
+  _subscribeToQA = (callback) => {
+    callback(getMockData());
+    listeners.add(callback);
+    return () => { listeners.delete(callback); };
+  };
+
+  _addQuestion = async (nickname, question) => {
+    const items = getMockData();
+    const id = Date.now().toString();
+    const newItem: QAItem = {
+      id, nickname, question, reply: '', isReplied: false,
+      timestamp: Math.floor(Date.now() / 1000),
+    };
+    saveMockData([newItem, ...items]);
+    return id;
+  };
+
+  _replyToQuestion = async (id, reply) => {
+    const items = getMockData();
+    saveMockData(items.map(i => i.id === id ? { ...i, reply, isReplied: true } : i));
+  };
+
+  _deleteQuestion = async (id) => {
+    const items = getMockData();
+    saveMockData(items.filter(i => i.id !== id));
+  };
+}
+
+// --- Exports ---
+export const subscribeToQA = _subscribeToQA;
+export const addQuestion = _addQuestion;
+export const replyToQuestion = _replyToQuestion;
+export const deleteQuestion = _deleteQuestion;
