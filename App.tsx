@@ -50,7 +50,7 @@ const App: React.FC = () => {
   };
 
   return (
-    <div className="h-screen w-full bg-stone-900 overflow-hidden relative font-sans">
+    <div className="h-[100dvh] w-full bg-stone-900 overflow-hidden relative font-sans">
         
       {/* Background Ambience */}
       <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/wood-pattern.png')] opacity-40 pointer-events-none"></div>

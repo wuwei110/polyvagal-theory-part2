@@ -106,9 +106,9 @@ export const QABoard: React.FC = () => {
   };
 
   return (
-    <div className="flex flex-col h-full bg-white p-4 overflow-hidden rounded-lg shadow-inner relative z-10">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 border-b pb-2 select-none gap-2">
-        <h2 className="text-xl font-bold text-gray-800 font-serif flex-shrink-0">
+    <div className="flex flex-col h-full bg-white p-2 sm:p-4 overflow-hidden rounded-lg shadow-inner relative z-10">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-2 sm:mb-4 border-b pb-2 select-none gap-2">
+        <h2 className="text-lg sm:text-xl font-bold text-gray-800 font-serif flex-shrink-0">
             读者互动看板
         </h2>
         
@@ -256,7 +256,7 @@ export const QABoard: React.FC = () => {
             placeholder="请输入您的问题..."
             value={newQuestion}
             onChange={(e) => setNewQuestion(e.target.value)}
-            className="flex-1 border rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-orange-400 bg-orange-50 resize-none h-16"
+            className="flex-1 border rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-orange-400 bg-orange-50 resize-none h-12 sm:h-16"
             maxLength={200}
           />
           <button
