@@ -9,47 +9,196 @@ const BGM_URL = "/testrec.MP3";
 // Helper to determine total sheets
 const TOTAL_SHEETS = Math.ceil(bookPages.length / 2);
 
+// Hook to detect mobile device
+const useIsMobile = () => {
+  const [isMobile, setIsMobile] = useState(false);
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+  return isMobile;
+};
+
 const App: React.FC = () => {
-  const [flippedCount, setFlippedCount] = useState(0); // 0 means cover is closed (all sheets on right)
-  const [flippingIndex, setFlippingIndex] = useState<number | null>(null);
   const [isAudioPlaying, setIsAudioPlaying] = useState(false);
-  const [hasInteracted, setHasInteracted] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const isMobile = useIsMobile();
 
   // Attempt to start audio on first interaction
   const startAudio = () => {
     if (audioRef.current) {
-        // We only try to play if it's currently paused
         if (audioRef.current.paused) {
             audioRef.current.play().catch(e => {
-                // Log only the message to avoid circular structure errors when logging DOM objects
                 console.log("Auto-play blocked, waiting for user click.");
             });
         }
     }
   };
 
-  // Reliable toggle function based on actual DOM state
   const toggleAudio = () => {
     const audio = audioRef.current;
     if (!audio) return;
-
     if (audio.paused) {
-      const playPromise = audio.play();
-      if (playPromise !== undefined) {
-        playPromise.then(() => {
-          // Play started successfully
-        }).catch(error => {
-          console.error("Audio play failed:", error instanceof Error ? error.message : "Unknown error");
-        });
-      }
+      audio.play().catch(error => console.error("Audio play failed:", error));
     } else {
       audio.pause();
     }
   };
 
+  return (
+    <div className="h-screen w-full bg-stone-900 overflow-hidden relative font-sans">
+        
+      {/* Background Ambience */}
+      <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/wood-pattern.png')] opacity-40 pointer-events-none"></div>
+      <div className="absolute inset-0 bg-gradient-to-b from-black/80 via-transparent to-black/80 pointer-events-none"></div>
+      
+      {/* Hidden Audio Element */}
+      <audio 
+        ref={audioRef} 
+        src={BGM_URL} 
+        loop 
+        preload="auto"
+        onPlay={() => setIsAudioPlaying(true)}
+        onPause={() => setIsAudioPlaying(false)}
+        onError={(e) => {
+            console.log("Audio source failed to load.", e);
+            alert("背景音乐加载失败。请确保 public/testrec.MP3 文件存在且文件名大小写匹配。");
+        }}
+      />
+
+      {/* Audio Control Button */}
+      <button 
+        onClick={(e) => { 
+            e.preventDefault();
+            e.stopPropagation(); 
+            toggleAudio(); 
+        }}
+        className={`fixed top-4 right-4 z-[100] p-3 rounded-full shadow-lg transition-all border backdrop-blur-sm cursor-pointer hover:scale-105 active:scale-95 ${isAudioPlaying ? 'bg-orange-800/80 text-orange-100 border-orange-600' : 'bg-gray-800/80 text-gray-400 border-gray-600'}`}
+        title={isAudioPlaying ? "暂停音乐" : "播放音乐"}
+        aria-label={isAudioPlaying ? "Pause Music" : "Play Music"}
+      >
+        {isAudioPlaying ? (
+            <div className="flex space-x-1 items-end h-4 w-4 justify-center pointer-events-none">
+                <div className="w-1 bg-orange-200 animate-[bounce_1s_infinite] h-2"></div>
+                <div className="w-1 bg-orange-200 animate-[bounce_1.2s_infinite] h-4"></div>
+                <div className="w-1 bg-orange-200 animate-[bounce_0.8s_infinite] h-3"></div>
+            </div>
+        ) : (
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15zM17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" /></svg>
+        )}
+      </button>
+
+      {/* Main Content Area */}
+      {isMobile ? (
+        <MobileBook startAudio={startAudio} />
+      ) : (
+        <DesktopBook startAudio={startAudio} />
+      )}
+
+    </div>
+  );
+};
+
+// --- Mobile View Component ---
+const MobileBook: React.FC<{ startAudio: () => void }> = ({ startAudio }) => {
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [hasInteracted, setHasInteracted] = useState(false);
+
   const handleNext = () => {
-    // Try to play audio on the first interaction (opening the book)
+    if (!hasInteracted) { setHasInteracted(true); startAudio(); }
+    if (currentIndex < bookPages.length - 1) {
+      setCurrentIndex(prev => prev + 1);
+    }
+  };
+
+  const handlePrev = () => {
+    if (currentIndex > 0) {
+      setCurrentIndex(prev => prev - 1);
+    }
+  };
+
+  const handleJumpToQA = () => {
+    if (!hasInteracted) { setHasInteracted(true); startAudio(); }
+    const qaIndex = bookPages.findIndex(p => p.isInteractive);
+    if (qaIndex !== -1) setCurrentIndex(qaIndex);
+  };
+  
+  const handleJumpToCover = () => {
+     setCurrentIndex(0);
+  };
+
+  const page = bookPages[currentIndex];
+  const isCover = page.isCover;
+
+  return (
+    <div className="w-full h-full flex flex-col pt-16 pb-4 px-3 sm:px-4">
+      {/* Card Container */}
+      <div className={`flex-1 flex flex-col rounded-lg shadow-2xl overflow-hidden border border-stone-300 relative ${isCover ? 'bg-[#5c2e2e] border-none' : 'bg-[#fdf6e3]'}`}>
+        
+        {/* Content */}
+        <BookPageContent page={page} />
+
+        {/* Navigation Bar (Bottom) */}
+        {!isCover && (
+            <div className="h-14 bg-[#fbf3db] border-t border-stone-200/60 flex items-center justify-between px-4 shrink-0 z-20">
+                <button 
+                    onClick={handlePrev}
+                    disabled={currentIndex === 0}
+                    className={`flex items-center gap-1 text-orange-800 font-serif font-bold transition-opacity ${currentIndex === 0 ? 'opacity-30' : 'active:scale-95'}`}
+                >
+                    <span className="text-lg">←</span> PREV
+                </button>
+                
+                <div className="flex gap-3 text-[10px] text-orange-800/60 font-serif uppercase tracking-widest">
+                     <button onClick={handleJumpToCover}>⌂ 封面</button>
+                     {!page.isInteractive && (
+                        <button onClick={handleJumpToQA}>↬ 留言</button>
+                     )}
+                </div>
+
+                <button 
+                    onClick={handleNext}
+                    disabled={currentIndex === bookPages.length - 1}
+                    className={`flex items-center gap-1 text-orange-800 font-serif font-bold transition-opacity ${currentIndex === bookPages.length - 1 ? 'opacity-30' : 'active:scale-95'}`}
+                >
+                    NEXT <span className="text-lg">→</span>
+                </button>
+            </div>
+        )}
+
+        {/* Cover Overlay Button */}
+        {isCover && (
+             <div className="absolute inset-0 flex items-end justify-center pb-12 z-20 pointer-events-none">
+                <button 
+                    onClick={(e) => { e.stopPropagation(); handleNext(); }}
+                    className="pointer-events-auto flex items-center gap-2 text-orange-100 bg-black/20 hover:bg-black/40 backdrop-blur-sm px-6 py-3 rounded-full border border-orange-200/30 transition-all active:scale-95 animate-pulse"
+                >
+                    <span className="text-base font-serif tracking-widest">开始阅读</span>
+                    <span>→</span>
+                </button>
+             </div>
+        )}
+      </div>
+      
+      {/* Page Number Indicator (Outside card) */}
+      <div className="text-center mt-2 text-stone-500 text-[10px] font-serif">
+         {page.id} / {bookPages.length}
+      </div>
+    </div>
+  );
+};
+
+// --- Desktop View Component (Original Book) ---
+const DesktopBook: React.FC<{ startAudio: () => void }> = ({ startAudio }) => {
+  const [flippedCount, setFlippedCount] = useState(0); 
+  const [flippingIndex, setFlippingIndex] = useState<number | null>(null);
+  const [hasInteracted, setHasInteracted] = useState(false);
+
+  const handleNext = () => {
     if (!hasInteracted) {
         setHasInteracted(true);
         startAudio();
@@ -58,7 +207,7 @@ const App: React.FC = () => {
     if (flippedCount < TOTAL_SHEETS) {
       setFlippingIndex(flippedCount);
       setFlippedCount(prev => prev + 1);
-      setTimeout(() => setFlippingIndex(null), 1000); // Sync with CSS transition duration
+      setTimeout(() => setFlippingIndex(null), 1000); 
     }
   };
 
@@ -83,59 +232,10 @@ const App: React.FC = () => {
   };
 
   return (
-    <div className="h-screen w-full bg-stone-900 flex items-center justify-center overflow-hidden relative font-sans">
-        
-      {/* Background Ambience */}
-      <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/wood-pattern.png')] opacity-40 pointer-events-none"></div>
-      <div className="absolute inset-0 bg-gradient-to-b from-black/80 via-transparent to-black/80 pointer-events-none"></div>
-      
-      {/* Hidden Audio Element - Removed crossOrigin to prevent CORS errors on redirects */}
-      <audio 
-        ref={audioRef} 
-        src={BGM_URL} 
-        loop 
-        preload="auto"
-        onPlay={() => setIsAudioPlaying(true)}
-        onPause={() => setIsAudioPlaying(false)}
-        onError={(e) => {
-            console.log("Audio source failed to load.", e);
-            alert("背景音乐加载失败。请确保 public/testrec.MP3 文件存在且文件名大小写匹配。");
-        }}
-      />
-
-      {/* Audio Control Button - Z-Index 100 to ensure it's on top */}
-      <button 
-        onClick={(e) => { 
-            e.preventDefault();
-            e.stopPropagation(); 
-            toggleAudio(); 
-        }}
-        className={`fixed top-4 right-4 z-[100] p-3 rounded-full shadow-lg transition-all border backdrop-blur-sm cursor-pointer hover:scale-105 active:scale-95 ${isAudioPlaying ? 'bg-orange-800/80 text-orange-100 border-orange-600' : 'bg-gray-800/80 text-gray-400 border-gray-600'}`}
-        title={isAudioPlaying ? "暂停音乐" : "播放音乐"}
-        aria-label={isAudioPlaying ? "Pause Music" : "Play Music"}
-      >
-        {isAudioPlaying ? (
-            <div className="flex space-x-1 items-end h-4 w-4 justify-center pointer-events-none">
-                <div className="w-1 bg-orange-200 animate-[bounce_1s_infinite] h-2"></div>
-                <div className="w-1 bg-orange-200 animate-[bounce_1.2s_infinite] h-4"></div>
-                <div className="w-1 bg-orange-200 animate-[bounce_0.8s_infinite] h-3"></div>
-            </div>
-        ) : (
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15zM17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" /></svg>
-        )}
-      </button>
-
-      {/* Book Container 
-          Dimensions Logic:
-          - w-[min(95vw,1200px,135vh)] 
-            1. 95vw: Never wider than 95% of screen width.
-            2. 1200px: Never wider than design max.
-            3. 135vh: Since height = width / 1.5, we ensure height <= 90vh (90 * 1.5 = 135).
-            This ensures the book always fits completely within the viewport.
-      */}
+    <div className="w-full h-full flex items-center justify-center">
       <div className="relative shadow-2xl book-perspective select-none w-[min(95vw,1200px,135vh)] aspect-[1.5/1]">
         
-        {/* Book Spine (Visual only) */}
+        {/* Book Spine */}
         <div className="absolute left-1/2 top-[1%] bottom-[1%] w-8 sm:w-10 -ml-4 sm:-ml-5 bg-orange-950 rounded-l shadow-2xl z-0 transform translate-z-[-4px]"></div>
 
         {/* Sheets */}
@@ -223,12 +323,10 @@ const Sheet: React.FC<SheetProps> = ({
           {/* Controls Footer (Right Page) */}
           {!isCoverSheet && (
             <div className="h-[10%] min-h-[40px] border-t border-stone-200/60 flex justify-between items-center px-4 sm:px-6 bg-[#fbf3db] text-[10px] sm:text-xs">
-               {/* Left: Page ID */}
                <div className="text-stone-400 font-serif italic w-8">
                  {frontPage?.id}
                </div>
                
-               {/* Center: Jump Link */}
                {!frontPage?.isInteractive && (
                    <button 
                        onClick={(e) => { e.stopPropagation(); onJumpQA(); }}
@@ -238,7 +336,6 @@ const Sheet: React.FC<SheetProps> = ({
                    </button>
                )}
                
-               {/* Right: Next Button */}
                <div className="w-8 flex justify-end">
                {frontPage && frontPage.id < 30 && (
                    <div className="flex items-center gap-2">
@@ -287,7 +384,6 @@ const Sheet: React.FC<SheetProps> = ({
 
           {/* Controls Footer (Left Page) */}
           <div className="h-[10%] min-h-[40px] border-t border-stone-200/60 flex justify-between items-center px-4 sm:px-6 bg-[#fbf3db] text-[10px] sm:text-xs">
-             {/* Left: Prev Button */}
              <div className="w-auto flex justify-start">
                  {backPage && (
                      <div className="flex items-center gap-2">
@@ -302,7 +398,6 @@ const Sheet: React.FC<SheetProps> = ({
                  )}
              </div>
 
-             {/* Center: Jump Links */}
              <div className="flex gap-4 text-orange-800/60 font-serif tracking-widest uppercase">
                  <button onClick={(e) => {e.stopPropagation(); onJumpCover();}} className="hover:text-orange-800 hover:underline transition-colors">⌂ 封面</button>
                  {!backPage?.isInteractive && (
@@ -310,7 +405,6 @@ const Sheet: React.FC<SheetProps> = ({
                  )}
              </div>
              
-             {/* Right: Page ID */}
              <div className="text-stone-400 font-serif italic w-auto text-right">
                {backPage?.id}
              </div>
