@@ -8,6 +8,7 @@ const ITEMS_PER_PAGE = 5;
 
 export const QABoard: React.FC = () => {
   const [questions, setQuestions] = useState<QAItem[]>([]);
+  const [connectionError, setConnectionError] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [nickname, setNickname] = useState('');
   const [newQuestion, setNewQuestion] = useState('');
@@ -24,8 +25,14 @@ export const QABoard: React.FC = () => {
   const [myQuestionIds, setMyQuestionIds] = useState<string[]>([]);
 
   useEffect(() => {
-    const unsubscribe = subscribeToQA((data) => {
-      setQuestions(data);
+    const unsubscribe = subscribeToQA((data, error) => {
+      if (error) {
+          setConnectionError(error);
+          setQuestions([]); // Clear or keep? Currently firebase.ts returns [] on error.
+      } else {
+          setQuestions(data);
+          setConnectionError(null);
+      }
     });
 
     // Load user's own question IDs from local storage
@@ -72,15 +79,20 @@ export const QABoard: React.FC = () => {
     e.preventDefault();
     if (!nickname.trim() || !newQuestion.trim()) return;
     
-    // Add question and get ID
-    const newId = await addQuestion(nickname, newQuestion);
-    
-    // Update local list of own questions
-    const updatedMyIds = [...myQuestionIds, newId];
-    setMyQuestionIds(updatedMyIds);
-    localStorage.setItem(MY_QUESTIONS_KEY, JSON.stringify(updatedMyIds));
+    try {
+        // Add question and get ID
+        const newId = await addQuestion(nickname, newQuestion);
+        
+        // Update local list of own questions
+        const updatedMyIds = [...myQuestionIds, newId];
+        setMyQuestionIds(updatedMyIds);
+        localStorage.setItem(MY_QUESTIONS_KEY, JSON.stringify(updatedMyIds));
 
-    setNewQuestion('');
+        setNewQuestion('');
+    } catch (error) {
+        console.error("Submit error:", error);
+        alert("提交失败，请检查网络连接或数据库配置。");
+    }
   };
 
   const handleReply = async (id: string) => {
@@ -113,11 +125,21 @@ export const QABoard: React.FC = () => {
         </h2>
         
         <div className="flex flex-wrap gap-2 items-center justify-end w-full sm:w-auto">
-            {/* Local Mode Indicator */}
-            {isLocalMode && (
-                <div className="text-xs px-2 py-1.5 rounded bg-yellow-50 text-yellow-700 border border-yellow-200 flex items-center gap-1" title="未配置Firebase，数据仅保存在本地">
-                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
-                    本地模式
+            {/* Status Indicator */}
+            {isLocalMode ? (
+                <div className="text-xs px-2 py-1.5 rounded bg-yellow-50 text-yellow-700 border border-yellow-200 flex items-center gap-1 font-bold" title="未检测到Firebase配置，使用本地存储">
+                    <span className="w-2 h-2 rounded-full bg-yellow-500 animate-pulse"></span>
+                    本地模式 (无同步)
+                </div>
+            ) : connectionError ? (
+                <div className="text-xs px-2 py-1.5 rounded bg-red-50 text-red-700 border border-red-200 flex items-center gap-1 font-bold animate-pulse" title={connectionError}>
+                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    连接失败
+                </div>
+            ) : (
+                <div className="text-xs px-2 py-1.5 rounded bg-green-50 text-green-700 border border-green-200 flex items-center gap-1 font-bold" title="已连接Firebase">
+                    <span className="w-2 h-2 rounded-full bg-green-500"></span>
+                    云端已连接
                 </div>
             )}
 
@@ -165,7 +187,19 @@ export const QABoard: React.FC = () => {
       {/* Question List Area */}
       <div className="md:flex-1 md:overflow-y-auto overflow-visible scrollbar-hide mb-4 space-y-4 pr-2">
         {questions.length === 0 ? (
-            <p className="text-center text-gray-400 italic mt-10">暂无提问，欢迎留言...</p>
+            <div className="flex flex-col items-center justify-center mt-10 text-gray-400 gap-2">
+                <p className="italic">
+                    {connectionError ? `连接断开: ${connectionError}` : '暂无提问，欢迎留言...'}
+                </p>
+                {connectionError && (
+                    <button 
+                        onClick={() => window.location.reload()} 
+                        className="text-xs text-blue-500 underline"
+                    >
+                        刷新重试
+                    </button>
+                )}
+            </div>
         ) : (
             questions.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE).map((q) => {
                 const isMyQuestion = myQuestionIds.includes(q.id);

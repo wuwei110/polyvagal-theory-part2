@@ -26,7 +26,10 @@ const useIsMobile = () => {
 const App: React.FC = () => {
   const [isAudioPlaying, setIsAudioPlaying] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
-  const isMobile = useIsMobile();
+  const systemIsMobile = useIsMobile();
+  const [viewMode, setViewMode] = useState<'auto' | 'mobile' | 'desktop'>('auto');
+  
+  const isMobile = viewMode === 'auto' ? systemIsMobile : viewMode === 'mobile';
 
   // Attempt to start audio on first interaction
   const startAudio = () => {
@@ -69,6 +72,19 @@ const App: React.FC = () => {
             alert("背景音乐加载失败。请确保 public/testrec.MP3 文件存在且文件名大小写匹配。");
         }}
       />
+
+      {/* View Mode Toggle */}
+      <button 
+        onClick={(e) => { 
+            e.preventDefault();
+            e.stopPropagation();
+            setViewMode(prev => prev === 'auto' ? 'desktop' : prev === 'desktop' ? 'mobile' : 'auto');
+        }}
+        className={`fixed top-4 right-16 z-[100] p-3 rounded-full shadow-lg transition-all border backdrop-blur-sm cursor-pointer hover:scale-105 active:scale-95 bg-stone-800/80 text-stone-300 border-stone-600`}
+        title={`当前视图: ${viewMode === 'auto' ? '自动' : viewMode === 'mobile' ? '手机' : '电脑'} (点击切换)`}
+      >
+        {viewMode === 'auto' ? (isMobile ? '📱A' : '💻A') : viewMode === 'mobile' ? '📱' : '💻'}
+      </button>
 
       {/* Audio Control Button */}
       <button 
