@@ -418,7 +418,7 @@ const Sheet: React.FC<SheetProps> = ({
 const BookPageContent: React.FC<{ page: PageContent }> = ({ page }) => {
   if (page.isInteractive) {
     return (
-        <div className="flex-1 overflow-hidden p-2 flex flex-col">
+        <div className="flex-1 md:overflow-hidden overflow-y-auto p-2 flex flex-col">
             <div className="w-full text-center mb-1 flex-shrink-0">
                 <p className="text-[10px] text-stone-400 font-serif">未经本网页作者许可不得转载</p>
             </div>

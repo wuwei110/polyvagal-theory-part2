@@ -106,7 +106,7 @@ export const QABoard: React.FC = () => {
   };
 
   return (
-    <div className="flex flex-col h-full bg-white p-2 sm:p-4 overflow-hidden rounded-lg shadow-inner relative z-10">
+    <div className="flex flex-col md:h-full h-auto bg-white p-2 sm:p-4 md:overflow-hidden overflow-visible rounded-lg shadow-inner relative z-10">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-2 sm:mb-4 border-b pb-2 select-none gap-2">
         <h2 className="text-lg sm:text-xl font-bold text-gray-800 font-serif flex-shrink-0">
             读者互动看板
@@ -155,7 +155,7 @@ export const QABoard: React.FC = () => {
       </div>
 
       {/* Question List Area */}
-      <div className="flex-1 overflow-y-auto scrollbar-hide mb-4 space-y-4 pr-2">
+      <div className="md:flex-1 md:overflow-y-auto overflow-visible scrollbar-hide mb-4 space-y-4 pr-2">
         {questions.length === 0 ? (
             <p className="text-center text-gray-400 italic mt-10">暂无提问，欢迎留言...</p>
         ) : (
