@@ -13,8 +13,12 @@ export const QABoard: React.FC = () => {
   const [nickname, setNickname] = useState('');
   const [newQuestion, setNewQuestion] = useState('');
   
-  // Admin State
-  const [isAdmin, setIsAdmin] = useState(false);
+  // Admin State (Persisted)
+  const [isAdmin, setIsAdmin] = useState(() => {
+      try {
+          return localStorage.getItem('qa_is_admin') === 'true';
+      } catch { return false; }
+  });
   const [showPwdInput, setShowPwdInput] = useState(false);
   const [pwdValue, setPwdValue] = useState('');
   
@@ -27,11 +31,15 @@ export const QABoard: React.FC = () => {
   useEffect(() => {
     const unsubscribe = subscribeToQA((data, error) => {
       if (error) {
+          console.error("Subscription Error:", error);
           setConnectionError(error);
-          setQuestions([]); // Clear or keep? Currently firebase.ts returns [] on error.
+          // Don't clear data immediately on error to show cached if available
       } else {
           setQuestions(data);
           setConnectionError(null);
+          // Debug logs
+          console.log("QABoard Updated. Items:", data.length);
+          if (data.length > 0) console.log("Sample ID:", data[0].id);
       }
     });
 
@@ -39,7 +47,9 @@ export const QABoard: React.FC = () => {
     try {
         const storedIds = localStorage.getItem(MY_QUESTIONS_KEY);
         if (storedIds) {
-            setMyQuestionIds(JSON.parse(storedIds));
+            const parsed = JSON.parse(storedIds);
+            setMyQuestionIds(parsed);
+            console.log("Loaded My IDs:", parsed);
         }
     } catch (e) {
         console.error("Failed to load my questions", e);
@@ -52,6 +62,7 @@ export const QABoard: React.FC = () => {
       if (isAdmin) {
           // Logout
           setIsAdmin(false);
+          localStorage.removeItem('qa_is_admin');
           setPwdValue('');
       } else {
           // Show input field
@@ -62,6 +73,7 @@ export const QABoard: React.FC = () => {
   const handlePwdSubmit = () => {
       if (pwdValue === ADMIN_PASSWORD) {
           setIsAdmin(true);
+          localStorage.setItem('qa_is_admin', 'true');
           setShowPwdInput(false);
           setPwdValue('');
       } else {
@@ -80,8 +92,9 @@ export const QABoard: React.FC = () => {
     if (!nickname.trim() || !newQuestion.trim()) return;
     
     try {
-        // Add question and get ID
+        // Add question and get ID (With timeout)
         const newId = await addQuestion(nickname, newQuestion);
+        console.log("Submitted New Question. ID:", newId);
         
         // Update local list of own questions
         const updatedMyIds = [...myQuestionIds, newId];
@@ -91,7 +104,7 @@ export const QABoard: React.FC = () => {
         setNewQuestion('');
     } catch (error) {
         console.error("Submit error:", error);
-        alert("提交失败，请检查网络连接或数据库配置。");
+        alert(`提交失败: ${error instanceof Error ? error.message : '未知错误'}`);
     }
   };
 
@@ -203,9 +216,14 @@ export const QABoard: React.FC = () => {
         ) : (
             questions.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE).map((q) => {
                 const isMyQuestion = myQuestionIds.includes(q.id);
-                
+                // Highlight logic
+                const containerClass = `p-3 rounded border relative group transition-colors duration-500 
+                    ${q.pending ? 'bg-yellow-50 border-yellow-300 shadow-sm' : 
+                      isMyQuestion ? 'bg-blue-50 border-blue-100' : 
+                      'bg-orange-50 border-orange-100'}`;
+
                 return (
-                <div key={q.id} className={`p-3 rounded border relative group ${isMyQuestion ? 'bg-blue-50 border-blue-100' : 'bg-orange-50 border-orange-100'}`}>
+                <div key={q.id} className={containerClass}>
                     {/* Delete Button (Only for own questions or Admin) */}
                     {(isMyQuestion || isAdmin) && (
                         <button 
@@ -221,7 +239,13 @@ export const QABoard: React.FC = () => {
 
                     <div className="flex justify-between items-baseline mb-1 pr-6">
                         <span className={`font-bold text-sm ${isMyQuestion ? 'text-blue-800' : 'text-orange-800'}`}>
-                            {q.nickname} {isMyQuestion && <span className="text-[10px] bg-blue-100 text-blue-600 px-1 rounded ml-1">我</span>}
+                            {q.nickname} 
+                            {isMyQuestion && <span className="text-[10px] bg-blue-100 text-blue-600 px-1 rounded ml-1">我</span>}
+                            {isAdmin && <span className="text-[8px] text-gray-300 ml-1 font-mono">{q.id.slice(0,4)}</span>}
+                            {q.pending && <span className="text-[10px] text-orange-600 ml-2 animate-pulse font-bold flex items-center gap-1">
+                                <span className="w-2 h-2 bg-orange-500 rounded-full"></span> 
+                                发送中... (若长时间未消失请检查网络)
+                            </span>}
                         </span>
                         <span className="text-xs text-gray-400">
                             {q.timestamp ? new Date(q.timestamp * 1000).toLocaleDateString() : '刚刚'}
@@ -292,6 +316,7 @@ export const QABoard: React.FC = () => {
             className="w-1/3 border rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-orange-400 bg-orange-50"
             maxLength={10}
           />
+          <span className="text-[10px] text-gray-400 self-center">* 不同设备相同昵称视为不同用户</span>
         </div>
         <div className="flex gap-2">
           <textarea

@@ -15,6 +15,8 @@ export interface QAItem {
   reply?: string;
   timestamp: number;
   isReplied: boolean;
+  pending?: boolean; // True if local write not yet acknowledged by server
+  userId?: string;   // Optional author ID for future features
 }
 
 export enum TurnDirection {

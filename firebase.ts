@@ -49,12 +49,16 @@ if (hasValidConfig) {
 
   _subscribeToQA = (callback) => {
     const q = query(colRef, orderBy('timestamp', 'desc'));
-    return onSnapshot(q, (snap) => {
-      const items = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
+    // includeMetadataChanges: true allows us to see local pending writes immediately
+    return onSnapshot(q, { includeMetadataChanges: true }, (snap) => {
+      const items = snap.docs.map((d) => ({ 
+          id: d.id, 
+          pending: d.metadata.hasPendingWrites,
+          ...(d.data() as any) 
+      }));
       callback(items as QAItem[]);
     }, (err) => {
       console.error('Firestore Error:', err);
-      // Report error to UI
       const msg = err.code === 'unavailable' || err.message.includes('offline') 
           ? '无法连接服务器 (Network Error)' 
           : `数据库错误: ${err.code}`;
@@ -66,7 +70,13 @@ if (hasValidConfig) {
     await authPromise; // Ensure auth
     const userId = auth.currentUser?.uid || null;
     const now = Math.floor(Date.now() / 1000);
-    const docRef = await addDoc(colRef, { 
+    
+    // Create a timeout promise
+    const timeout = new Promise<never>((_, reject) => 
+        setTimeout(() => reject(new Error('Request timed out (Network unavailable?)')), 10000)
+    );
+
+    const docRefPromise = addDoc(colRef, { 
         nickname, 
         question, 
         reply: '', 
@@ -74,6 +84,9 @@ if (hasValidConfig) {
         timestamp: now,
         userId 
     });
+
+    // Race against timeout
+    const docRef = await Promise.race([docRefPromise, timeout]);
     return docRef.id;
   };
 
@@ -106,7 +119,6 @@ if (hasValidConfig) {
     listeners.forEach(cb => cb(data));
   };
 
-  // Sync across tabs
   if (typeof window !== 'undefined') {
       window.addEventListener('storage', (e) => {
         if (e.key === STORAGE_KEY) {
@@ -116,18 +128,13 @@ if (hasValidConfig) {
   }
 
   _subscribeToQA = (callback) => {
-    // Mock implementation never errors
-    callback(getMockData());
-    listeners.add((data) => callback(data));
-    return () => { 
-        // Need to find and remove the wrapper logic if strict, but for mock it's fine
-        // Actually Set doesn't support easy removal of wrapped function.
-        // Simplified:
-    };
+    const data = getMockData().map(i => ({ ...i, pending: false }));
+    callback(data);
+    
+    const listener = (newData: QAItem[]) => callback(newData.map(i => ({ ...i, pending: false })));
+    listeners.add(listener);
+    return () => { listeners.delete(listener); };
   };
-  
-  // Re-implement simplified listener for mock to support unsubscribe correctly
-  // (Ignoring minor memory leak in mock for brevity as it is fallback)
 
   _addQuestion = async (nickname, question) => {
     const items = getMockData();
