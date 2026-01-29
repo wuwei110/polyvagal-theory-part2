@@ -116,7 +116,12 @@ export const QABoard: React.FC = () => {
 
   const handleDelete = async (id: string) => {
       if (window.confirm("确定要删除这条提问吗？此操作无法撤销。")) {
-          await deleteQuestion(id);
+          try {
+              await deleteQuestion(id);
+          } catch (error) {
+              console.error("Delete failed:", error);
+              alert(`删除失败: ${error instanceof Error ? error.message : '网络超时或无权限'}`);
+          }
       }
   };
 
@@ -140,7 +145,7 @@ export const QABoard: React.FC = () => {
         <div className="flex flex-wrap gap-2 items-center justify-end w-full sm:w-auto">
             {/* Status Indicator */}
             {isLocalMode ? (
-                <div className="text-xs px-2 py-1.5 rounded bg-yellow-50 text-yellow-700 border border-yellow-200 flex items-center gap-1 font-bold" title="未检测到Firebase配置，使用本地存储">
+                <div className="text-xs px-2 py-1.5 rounded bg-yellow-50 text-yellow-700 border border-yellow-200 flex items-center gap-1 font-bold" title="未检测到腾讯云开发配置，使用本地存储">
                     <span className="w-2 h-2 rounded-full bg-yellow-500 animate-pulse"></span>
                     本地模式 (无同步)
                 </div>
@@ -150,7 +155,7 @@ export const QABoard: React.FC = () => {
                     连接失败
                 </div>
             ) : (
-                <div className="text-xs px-2 py-1.5 rounded bg-green-50 text-green-700 border border-green-200 flex items-center gap-1 font-bold" title="已连接Firebase">
+                <div className="text-xs px-2 py-1.5 rounded bg-green-50 text-green-700 border border-green-200 flex items-center gap-1 font-bold" title="已连接腾讯云开发">
                     <span className="w-2 h-2 rounded-full bg-green-500"></span>
                     云端已连接
                 </div>
@@ -227,11 +232,17 @@ export const QABoard: React.FC = () => {
                     {/* Delete Button (Only for own questions or Admin) */}
                     {(isMyQuestion || isAdmin) && (
                         <button 
-                            onClick={() => handleDelete(q.id)}
-                            className="absolute top-2 right-2 text-gray-400 hover:text-red-500 p-1 z-10"
+                            // Use onPointerUp for better mobile touch response
+                            onPointerUp={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                handleDelete(q.id);
+                            }}
+                            className="absolute top-2 right-2 text-gray-400 hover:text-red-500 p-2 z-20 cursor-pointer active:scale-125 transition-transform"
                             title="删除"
+                            aria-label="删除此留言"
                         >
-                            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                             </svg>
                         </button>
@@ -316,7 +327,6 @@ export const QABoard: React.FC = () => {
             className="w-1/3 border rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-orange-400 bg-orange-50"
             maxLength={10}
           />
-          <span className="text-[10px] text-gray-400 self-center">* 不同设备相同昵称视为不同用户</span>
         </div>
         <div className="flex gap-2">
           <textarea

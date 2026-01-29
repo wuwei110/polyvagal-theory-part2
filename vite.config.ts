@@ -23,8 +23,8 @@ export default defineConfig(({ mode }) => {
         rollupOptions: {
           output: {
             manualChunks: {
-              // Split Firebase into separate chunk
-              'firebase': ['firebase/app', 'firebase/firestore'],
+              // Split CloudBase into separate chunk
+              'cloudbase': ['@cloudbase/js-sdk'],
               // Split React into separate chunk
               'react-vendor': ['react', 'react-dom']
             }
